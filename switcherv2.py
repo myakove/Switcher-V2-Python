@@ -30,6 +30,7 @@ class Switcherv2:
         if not self.current_session:
             self.connect()
             self.login()
+        self.info = self._info()
 
     @staticmethod
     def hour_match(hour):
@@ -121,26 +122,18 @@ class Switcherv2:
         time.sleep(3)
         return self.get_response(data=data)
 
-    @property
-    def name(self):
-        return self.binascii_to_str(data=self.get_data)[40:60]
-
-    @property
-    def state(self):
-        return self.binascii_to_str(data=self.get_data)[150:154]
-
-    @property
-    def power(self):
-        bin_out = ba.hexlify(self.get_data)[154:162]
-        return int(bin_out[2:4] + bin_out[0:2], 16)
-
-    @property
-    def electric_power(self):
-        return f"{(self.power / float(220))}(A)"
-
-    @property
-    def power_consumption(self):
-        return f"{str(self.power)}(W)"
+    def _info(self):
+        res = {}
+        data = self.get_data
+        power_bin_out = ba.hexlify(data)[154:162]
+        power = int(power_bin_out[2:4] + power_bin_out[0:2], 16)
+        state = "on" if self.binascii_to_str(data=data)[150:154] == self.state_on else "off"
+        res["state"] = state
+        res["power"] = int(power_bin_out[2:4] + power_bin_out[0:2], 16)
+        res["electric-power"] = f"{(power / float(220))}(A)"
+        res["power-consumption"] = f"{str(power)}(W)"
+        res["auto-shutdown-countdown"] = self.auto_shutdown_countdown(data)
+        return res
 
     def power_on(self, duration=None):
         duration_action = ON_OFF_DATA
@@ -150,7 +143,7 @@ class Switcherv2:
                 print("Enter a value between 1-60 minutes")
                 return
 
-        if self.state == self.state_on:
+        if self.info["state"] == "on":
             if not duration:
                 print("Device is already ON")
                 return
@@ -159,16 +152,15 @@ class Switcherv2:
         return self.send_action(action=f"{ON_OFF_DATA}10000000000" if not duration else duration_action)
 
     def power_off(self):
-        if self.state == self.state_off:
+        if self.info["state"] == "off":
             print("Device is already OFF")
             return
 
         print("Sending OFF Command to Switcher...")
         return self.send_action(action=f"{ON_OFF_DATA}00000000000")
 
-    @property
-    def auto_shutdown_countdown(self):
-        bin_out = ba.hexlify(self.get_data)[178:186]
+    def auto_shutdown_countdown(self, data):
+        bin_out = ba.hexlify(data)[178:186]
         open_time = int(bin_out[6:8] + bin_out[4:6] + bin_out[2:4] + bin_out[0:2], 16)
         m_, s_ = divmod(open_time, 60)
         h_, m_ = divmod(m_, 60)
@@ -211,9 +203,10 @@ class Switcherv2:
 
 if __name__ == "__main__":
     sw = Switcherv2()
-    sw.power_on()
+    import ipdb;ipdb.set_trace()
+    # sw.power_on()
     # sw.auto_close(hour="01:00")
-    sw.power_off()
+    # sw.power_off()
     # sw.power_on(30)
     # sw.power_off
     # sw.power_on
